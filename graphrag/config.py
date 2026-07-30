@@ -24,10 +24,11 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     database_url: str | None = None
 
-    # OpenAI-compatible API
-    openai_api_base: str = "http://localhost:11535/v1"
+    # OpenAI-compatible API (native default; Docker Compose sets host.docker.internal via .env)
+    openai_api_base: str = "http://localhost:11434/v1"
     openai_api_key: str = "sk-local"
     openai_timeout_seconds: float = Field(default=60.0, gt=0)
+    openai_max_retries: int = Field(default=2, ge=0, le=8)
 
     # Models
     llm_model: str = "llama3.2"

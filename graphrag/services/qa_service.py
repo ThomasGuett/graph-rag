@@ -7,6 +7,7 @@ import asyncio
 from graphrag.adapters.llm.base import LLMClient
 from graphrag.api.schemas import QARequest, QAResponse, QASource, SearchMode, SearchResponse
 from graphrag.config import Settings
+from graphrag.exceptions import UpstreamModelError
 from graphrag.services.retrieval_service import RetrievalService, pack_context
 
 SYSTEM_PROMPT = """You are a helpful assistant that answers questions using only the provided knowledge-graph context.
@@ -19,6 +20,14 @@ Write a short partial answer (2-5 sentences). If the summary is irrelevant, repl
 REDUCE_SYSTEM = """You synthesize a final answer from partial community answers.
 Use only the partial answers. Resolve conflicts conservatively. If all say NO_INFO, say you do not know.
 Be concise and cite community labels when helpful."""
+
+EMPTY_CONTEXT_ANSWER = (
+    "I do not know. The knowledge graph returned no matching context for this question."
+)
+GENERATION_FAILED_ANSWER = (
+    "I could not generate an answer because the language model is unavailable. "
+    "Sources from retrieval are listed below when available."
+)
 
 
 class QAService:
@@ -47,21 +56,40 @@ class QAService:
             expand_hops=request.expand_hops,
             edge_types=request.edge_types,
         )
+        return await self._answer_from_search(request, search)
+
+    async def _answer_from_search(
+        self, request: QARequest, search: SearchResponse
+    ) -> QAResponse:
         mode_used = search.mode_used
+        if not search.hits:
+            return QAResponse(
+                answer=EMPTY_CONTEXT_ANSWER,
+                sources=[],
+                subgraph=search.subgraph if request.include_sources else None,
+                mode_used=mode_used,
+                confidence=None,
+                generation_error=None,
+            )
+
         context = pack_context(search.hits, self.settings.context_token_budget)
         user_prompt = (
             f"Context:\n{context or '(no matching context)'}\n\n"
             f"Question: {request.question}\n\n"
             "Answer:"
         )
-        answer = await self.llm.complete(system=SYSTEM_PROMPT, user=user_prompt)
-        sources = self._sources(request, search)
+        try:
+            answer = await self.llm.complete(system=SYSTEM_PROMPT, user=user_prompt)
+        except UpstreamModelError as exc:
+            return self._partial_response(request, search, error=str(exc))
+
         return QAResponse(
             answer=answer,
-            sources=sources,
+            sources=self._sources(request, search),
             subgraph=search.subgraph if request.include_sources else None,
             mode_used=mode_used,
             confidence=self._confidence(search),
+            generation_error=None,
         )
 
     async def _ask_global(self, request: QARequest, *, mode_used: SearchMode) -> QAResponse:
@@ -69,20 +97,9 @@ class QAService:
             request.question,
             top_k=request.top_k or self.settings.global_map_top_k,
         )
-        # If global fell back to hybrid (no communities), use pack path.
+        # Reuse hybrid fallback hits instead of re-searching via _ask_pack.
         if search.mode_used != "global":
-            return await self._ask_pack(
-                QARequest(
-                    question=request.question,
-                    mode="hybrid",
-                    top_k=request.top_k,
-                    expand_hops=request.expand_hops,
-                    node_types=request.node_types,
-                    edge_types=request.edge_types,
-                    include_sources=request.include_sources,
-                ),
-                mode_used="hybrid",
-            )
+            return await self._answer_from_search(request, search)
 
         sem = asyncio.Semaphore(self.settings.global_map_concurrency)
 
@@ -97,23 +114,61 @@ class QAService:
                 partial = await self.llm.complete(system=MAP_SYSTEM, user=user, temperature=0.1)
                 return hit.node_name, partial.strip()
 
-        mapped = await asyncio.gather(*[_map_one(h) for h in search.hits])
-        partial_blocks = "\n\n".join(
-            f"[{label}]\n{text}" for label, text in mapped if text
+        mapped = await asyncio.gather(
+            *[_map_one(h) for h in search.hits],
+            return_exceptions=True,
         )
+        usable: list[tuple[str, str]] = []
+        map_errors: list[str] = []
+        for item in mapped:
+            if isinstance(item, BaseException):
+                map_errors.append(str(item))
+                continue
+            label, text = item
+            if not text or text.upper() == "NO_INFO":
+                continue
+            usable.append((label, text))
+
+        if not usable:
+            err = (
+                map_errors[0]
+                if map_errors
+                else "all community maps returned NO_INFO or failed"
+            )
+            return self._partial_response(request, search, error=err)
+
+        partial_blocks = "\n\n".join(f"[{label}]\n{text}" for label, text in usable)
         reduce_user = (
             f"Question: {request.question}\n\n"
-            f"Partial answers:\n{partial_blocks or '(none)'}\n\n"
+            f"Partial answers:\n{partial_blocks}\n\n"
             "Final answer:"
         )
-        answer = await self.llm.complete(system=REDUCE_SYSTEM, user=reduce_user, temperature=0.2)
-        sources = self._sources(request, search)
+        try:
+            answer = await self.llm.complete(
+                system=REDUCE_SYSTEM, user=reduce_user, temperature=0.2
+            )
+        except UpstreamModelError as exc:
+            return self._partial_response(request, search, error=str(exc))
+
         return QAResponse(
             answer=answer,
-            sources=sources,
+            sources=self._sources(request, search),
             subgraph=search.subgraph if request.include_sources else None,
             mode_used=mode_used,
             confidence=self._confidence(search),
+            generation_error=None,
+        )
+
+    def _partial_response(
+        self, request: QARequest, search: SearchResponse, *, error: str
+    ) -> QAResponse:
+        return QAResponse(
+            answer=GENERATION_FAILED_ANSWER,
+            sources=self._sources(request, search),
+            subgraph=search.subgraph if request.include_sources else None,
+            mode_used=search.mode_used,
+            confidence=self._confidence(search),
+            generation_error=error,
         )
 
     def _sources(self, request: QARequest, search: SearchResponse) -> list[QASource]:

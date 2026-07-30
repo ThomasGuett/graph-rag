@@ -206,18 +206,23 @@ Modes:
       "chunk_id": "…",
       "node_id": "…",
       "node_name": "Billing Guide",
-      "excerpt": "Accounts are billed monthly…"
+      "excerpt": "Accounts are billed monthly…",
+      "score": 0.91
     }
   ],
   "subgraph": {
     "nodes": [],
     "edges": []
   },
-  "mode_used": "local"
+  "mode_used": "local",
+  "confidence": 0.87,
+  "generation_error": null
 }
 ```
 
-For `mode=global`, the service map-reduces over top community summaries (per-community partial answers → final synthesis).
+For `mode=global`, the service map-reduces over top community summaries (per-community partial answers → final synthesis). Failed community maps are skipped; if generation fails after retrieval succeeds, the response is still **200** with `sources` / `confidence` and `generation_error` set (Desk shows sources even when the LLM is down). Empty retrieval skips the LLM and returns a fixed “no matching context” answer.
+
+Ingest must finish (`documents.status`) before answers are useful; rebuild communities (`POST /communities/rebuild`) for global mode.
 
 ---
 
@@ -225,6 +230,18 @@ For `mode=global`, the service map-reduces over top community summaries (per-com
 
 ### `GET /health`
 
+Probes DB, a tiny embedding call (dim must match `embedding_dim`), and a tiny LLM completion. `status` is `ok` only when all three succeed; otherwise `degraded`.
+
 ```json
-{ "status": "ok", "embedding_dim": 2000, "db": true }
+{
+  "status": "ok",
+  "embedding_dim": 2000,
+  "db": true,
+  "llm_model": "llama3.2",
+  "embedding_model": "…",
+  "llm_ok": true,
+  "embeddings_ok": true
+}
 ```
+
+**Config note:** native default `OPENAI_API_BASE` is `http://localhost:11434/v1`. In Docker Compose, set `http://host.docker.internal:11434/v1` (see `.env.example`). `OPENAI_MAX_RETRIES` (default 2) applies to transient 5xx/timeouts on LLM and embeddings.
