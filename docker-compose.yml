@@ -9,8 +9,29 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     image: pgvector/pgvector:pg17
     volumes:
-      - ./data:/var/lib/postgresql/18/docker
+      - ./data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  api:
+    build: .
+    container_name: graphrag-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
