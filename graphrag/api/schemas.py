@@ -133,3 +133,66 @@ class HealthOut(BaseModel):
     db: bool
     llm_model: str
     embedding_model: str
+
+
+class DocumentCreate(BaseModel):
+    title: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    source_uri: str | None = None
+    props: dict = Field(default_factory=dict)
+
+
+class IngestJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    document_id: UUID
+    stage: str
+    status: str
+    progress: dict
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    text: str
+    source_uri: str | None = None
+    status: str
+    node_id: UUID | None = None
+    error: str | None = None
+    props: dict
+    created_at: datetime
+    updated_at: datetime
+    counts: dict[str, int] = Field(default_factory=dict)
+    job: IngestJobOut | None = None
+
+
+class DocumentCreateResponse(BaseModel):
+    document: DocumentOut
+    job: IngestJobOut
+
+
+class CommunityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    label: str
+    summary: str | None = None
+    node_id: UUID | None = None
+    member_count: int
+    props: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class CommunityDetailOut(CommunityOut):
+    members: list[NodeOut] = Field(default_factory=list)
+
+
+class CommunityRebuildOut(BaseModel):
+    communities: list[CommunityOut]

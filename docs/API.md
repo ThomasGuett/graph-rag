@@ -70,7 +70,7 @@ Returns `{ "nodes": [...], "edges": [...] }` for the local subgraph.
 }
 ```
 
-Server embeds synchronously (or accepts `?async=true` later) and stores `vector(2048)`.
+Server embeds synchronously (or accepts `?async=true` later) and stores `vector(2000)`.
 
 ### `POST /chunks/batch`
 
@@ -86,6 +86,54 @@ Server embeds synchronously (or accepts `?async=true` later) and stores `vector(
 ### `GET /chunks?node_id=…` · `GET /chunks/{id}` · `PATCH /chunks/{id}` · `DELETE /chunks/{id}`
 
 By default, responses **omit** the raw embedding vector; use `?include_embedding=true` when needed.
+
+---
+
+## Documents (indexing pipeline)
+
+### `POST /documents`
+
+```json
+{
+  "title": "Billing Guide",
+  "text": "Accounts are billed monthly...\n\nDr. Smith leads oncology at Boston General.",
+  "source_uri": "https://example.com/billing",
+  "props": { "external_id": "doc-42" }
+}
+```
+
+Creates a `document` node, an `ingest_jobs` row, and runs the pipeline in-process:
+
+1. chunk + embed  
+2. LLM entity/relationship extraction  
+3. entity resolution + graph write (`mentions` + typed edges)  
+4. flat connected-component communities + summaries  
+
+Response: `{ "document": {...}, "job": { "id", "stage", "status", "progress" } }`.
+
+### `GET /documents` · `GET /documents/{id}`
+
+Includes `status`, `error`, and `counts` (`chunks`, `mentions`).
+
+### `POST /documents/{id}/reindex`
+
+Clears document chunks + `mentions` edges, then re-runs the pipeline.
+
+---
+
+## Communities
+
+Flat connected components over entity nodes (excludes `document` / `community` scaffolding). No Leiden hierarchy yet.
+
+### `GET /communities`
+
+### `GET /communities/{id}`
+
+Includes `members` (nodes) and `summary`.
+
+### `POST /communities/rebuild`
+
+Full recompute of communities + LLM summaries + embedded summary chunks.
 
 ---
 
@@ -163,5 +211,5 @@ By default, responses **omit** the raw embedding vector; use `?include_embedding
 ### `GET /health`
 
 ```json
-{ "status": "ok", "embedding_dim": 2048, "db": true }
+{ "status": "ok", "embedding_dim": 2000, "db": true }
 ```

@@ -2,10 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pgvector.asyncpg import register_vector
-from sqlalchemy import event
 
-from graphrag.adapters.db.session import dispose_engine, get_engine
+from graphrag.adapters.db.session import dispose_engine
 from graphrag.api.routes import api_router
 from graphrag.config import get_settings
 from graphrag.exceptions import (
@@ -17,20 +15,13 @@ from graphrag.exceptions import (
     ValidationAppError,
 )
 
-def _register_vector_on_connect() -> None:
-    engine = get_engine()
-
-    @event.listens_for(engine.sync_engine, "connect")
-    def _on_connect(dbapi_connection, _connection_record) -> None:
-        dbapi_connection.run_async(register_vector)
-
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
-    if settings.embedding_dim != 2048:
-        raise RuntimeError("EMBEDDING_DIM must be 2048")
-    _register_vector_on_connect()
+    if settings.embedding_dim != 2000:
+        raise RuntimeError("EMBEDDING_DIM must be 2000")
+    # pgvector 0.5 + SQLAlchemy uses text bind format; do not register asyncpg binary codecs.
     yield
     await dispose_engine()
 

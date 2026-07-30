@@ -1,6 +1,6 @@
 # GraphRAG System Architecture
 
-Multi-purpose GraphRAG over **PostgreSQL + pgvector** (embedding dim **2048**), with a **Python** backend exposing a **CRUD REST API** and a retrieval/Q&A service that grounds an LLM in graph + vector context.
+Multi-purpose GraphRAG over **PostgreSQL + pgvector** (embedding dim **2000**), with a **Python** backend exposing a **CRUD REST API** and a retrieval/Q&A service that grounds an LLM in graph + vector context.
 
 ---
 
@@ -26,7 +26,7 @@ Multi-purpose GraphRAG over **PostgreSQL + pgvector** (embedding dim **2048**), 
 |  -----          -----           ------           |
 |  id, type,      src_id,         id, node_id,     |
 |  name,          dst_id,         text, embedding  |
-|  props          type            (pgvector 2048)  |
+|  props          type            (pgvector 2000)  |
 +--------------------------------------------------+
 ```
 
@@ -79,7 +79,7 @@ graphrag/
 ├── adapters/
 │   ├── db/                    # SQLAlchemy / asyncpg
 │   ├── llm/                   # chat completion client
-│   └── embeddings/            # 2048-d embedding client
+│   └── embeddings/            # 2000-d embedding client
 └── workers/                   # optional: async ingest / re-embed jobs
 ```
 
@@ -135,12 +135,12 @@ CREATE INDEX edges_src_idx ON edges (src_id);
 CREATE INDEX edges_dst_idx ON edges (dst_id);
 CREATE INDEX edges_type_idx ON edges (type);
 
--- Text units attached to nodes, with fixed 2048-d embeddings
+-- Text units attached to nodes, with fixed 2000-d embeddings
 CREATE TABLE chunks (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     node_id     UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     text        TEXT NOT NULL,
-    embedding   vector(2048),               -- NULL until embedded
+    embedding   vector(2000),               -- NULL until embedded
     props       JSONB NOT NULL DEFAULT '{}', -- e.g. { "section": "2.1", "ord": 3 }
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -157,11 +157,11 @@ CREATE INDEX chunks_embedding_hnsw
 
 ### Schema notes
 
-- **Embedding dim is fixed at 2048** — changing dim requires a migration (new column / rebuild index). Enforce in app config and DB check if desired.
+- **Embedding dim is fixed at 2000** — changing dim requires a migration (new column / rebuild index). Enforce in app config and DB check if desired.
 - **`props` JSONB** keeps the graph multi-purpose without proliferating columns.
 - **Chunks belong to nodes** — a document node can have many chunks; a concept node might have a single definitional chunk.
 - **Edges are directed**; undirected relations can be modeled as two edges or queried symmetrically in the service layer.
-- Optional later tables (out of v1 core): `documents` (raw ingest), `jobs` (embed queue), `conversations` (Q&A history).
+- Indexing tables: `documents` (raw text + status), `ingest_jobs`, `communities`, `community_members`. Community detection is **flat connected components** (Leiden later).
 
 ### Entity relationship
 
@@ -252,7 +252,7 @@ Question
    │
    ▼
 ┌─────────────────┐
-│  Embed query    │  same model family → vector(2048)
+│  Embed query    │  same model family → vector(2000)
 └────────┬────────┘
          ▼
 ┌─────────────────┐
@@ -328,13 +328,13 @@ The core model stays the same; adapters vary by domain.
 | Org / CRM | `person`, `team`, `account` | `reports_to`, `owns` | Bio / notes |
 | Products | `product`, `feature`, `ticket` | `has_feature`, `related_to` | Specs / descriptions |
 
-**Ingest flow (sync or worker):**
+**Ingest flow (`POST /documents`):**
 
-1. Upsert nodes (idempotent key in `props.external_id` if needed).
-2. Upsert edges.
-3. Split text → create chunks.
-4. Call embedding adapter → `UPDATE chunks SET embedding = …`.
-5. Optionally LLM-extract entities/relations from text and write more nodes/edges.
+1. Create `documents` row + `document`-typed node + `ingest_jobs` row.
+2. Split text → create/embed chunks on the document node.
+3. LLM-extract entities/relations per chunk.
+4. Resolve entities by normalized `(type, name)`; write nodes, `mentions` edges, typed edges, description chunks.
+5. Rebuild flat communities (connected components) + LLM summaries as embedded `community` chunks.
 
 ---
 
@@ -344,13 +344,13 @@ The core model stays the same; adapters vary by domain.
 
 ```python
 class EmbeddingClient(Protocol):
-    dim: int  # must be 2048
+    dim: int  # must be 2000
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         ...
 ```
 
-Fail fast if returned vectors are not length 2048.
+Fail fast if returned vectors are not length 2000.
 
 ### LLM
 
@@ -383,7 +383,7 @@ Environment / settings object (example):
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | Postgres DSN |
-| `EMBEDDING_DIM` | `2048` (asserted at startup) |
+| `EMBEDDING_DIM` | `2000` (asserted at startup) |
 | `EMBEDDING_PROVIDER` / API keys | Embedder config |
 | `LLM_PROVIDER` / model name / keys | Chat model |
 | `RETRIEVAL_TOP_K` | Default `8` |
@@ -439,8 +439,10 @@ Client POST /qa { question }
 2. **Embeddings + `/search`** — embedder adapter, HNSW, vector search API.
 3. **Graph expand** — neighbors + hybrid retrieval packing.
 4. **`/qa`** — LLM adapter + citation response.
-5. **Ingest workers** — batch embed, optional LLM extraction.
+5. **Ingest pipeline** — `POST /documents`: chunk → embed → LLM extract → resolve → flat communities.
 6. **Hardening** — auth, tenants, metrics, eval harness for retrieval quality.
+
+**Follow-ups (not in this phase):** Leiden hierarchical communities, Global Search map-reduce, dedicated entity-first Local Search mode.
 
 ---
 
