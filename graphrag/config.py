@@ -27,17 +27,19 @@ class Settings(BaseSettings):
     # OpenAI-compatible API
     openai_api_base: str = "http://localhost:11434/v1"
     openai_api_key: str = "sk-local"
+    openai_timeout_seconds: float = Field(default=60.0, gt=0)
 
     # Models
     llm_model: str = "llama3.2"
     embedding_model: str = "nomic-embed-text"
     embedding_dim: int = 2048
+    embedding_batch_size: int = Field(default=64, ge=1, le=2048)
 
     # Retrieval
-    retrieval_top_k: int = 8
-    expand_hops: int = 1
-    context_token_budget: int = 4000
-    hnsw_ef_search: int = 64
+    retrieval_top_k: int = Field(default=8, ge=1, le=100)
+    expand_hops: int = Field(default=1, ge=0, le=5)
+    context_token_budget: int = Field(default=4000, ge=100)
+    hnsw_ef_search: int = Field(default=64, ge=1)
 
     @field_validator("embedding_dim")
     @classmethod

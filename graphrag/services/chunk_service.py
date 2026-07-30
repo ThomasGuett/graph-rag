@@ -4,20 +4,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from graphrag.adapters.db.models import Chunk, Node
-from graphrag.adapters.embeddings.base import EmbeddingClient
 from graphrag.api.schemas import ChunkCreate, ChunkUpdate
+from graphrag.exceptions import NotFoundError
+from graphrag.services.embedding_service import EmbeddingService
 
 
 class ChunkService:
-    def __init__(self, session: AsyncSession, embeddings: EmbeddingClient) -> None:
+    def __init__(self, session: AsyncSession, embeddings: EmbeddingService) -> None:
         self.session = session
         self.embeddings = embeddings
 
     async def create(self, data: ChunkCreate) -> Chunk:
         node = await self.session.get(Node, data.node_id)
         if not node:
-            raise LookupError("node_id not found")
-        vectors = await self.embeddings.embed([data.text])
+            raise NotFoundError("node_id not found")
+        vectors = await self.embeddings.embed_texts([data.text])
         chunk = Chunk(
             node_id=data.node_id,
             text=data.text,
@@ -35,9 +36,9 @@ class ChunkService:
             (await self.session.execute(select(Node.id).where(Node.id.in_(node_ids)))).scalars().all()
         )
         if len(existing) != len(node_ids):
-            raise LookupError("one or more node_id values not found")
+            raise NotFoundError("one or more node_id values not found")
 
-        vectors = await self.embeddings.embed([item.text for item in items])
+        vectors = await self.embeddings.embed_texts([item.text for item in items])
         chunks: list[Chunk] = []
         for item, vector in zip(items, vectors, strict=True):
             chunk = Chunk(
@@ -75,7 +76,7 @@ class ChunkService:
             return None
         if data.text is not None:
             chunk.text = data.text
-            vectors = await self.embeddings.embed([data.text])
+            vectors = await self.embeddings.embed_texts([data.text])
             chunk.embedding = vectors[0]
         if data.props is not None:
             chunk.props = data.props

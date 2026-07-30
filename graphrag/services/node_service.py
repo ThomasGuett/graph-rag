@@ -4,8 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from graphrag.adapters.db.models import Edge, Node
-from graphrag.api.schemas import NodeCreate, NodeUpdate, SubgraphOut
-from graphrag.api.schemas import EdgeOut, NodeOut
+from graphrag.api.schemas import EdgeOut, NodeCreate, NodeOut, NodeUpdate, SubgraphOut
+from graphrag.domain.graph import filter_edges_for_direction, next_frontier
+from graphrag.domain.models import GraphEdge
 
 
 class NodeService:
@@ -75,30 +76,35 @@ class NodeService:
         visited_nodes: dict[UUID, Node] = {node.id: node}
         collected_edges: dict[UUID, Edge] = {}
         frontier = {node.id}
+        visited = {node.id}
 
         for _ in range(max(depth, 0)):
             if not frontier:
                 break
-            edge_stmt = select(Edge)
-            if direction == "out":
-                edge_stmt = edge_stmt.where(Edge.src_id.in_(frontier))
-            elif direction == "in":
-                edge_stmt = edge_stmt.where(Edge.dst_id.in_(frontier))
-            else:
-                edge_stmt = edge_stmt.where(
-                    (Edge.src_id.in_(frontier)) | (Edge.dst_id.in_(frontier))
-                )
+            edge_stmt = select(Edge).where(
+                (Edge.src_id.in_(frontier)) | (Edge.dst_id.in_(frontier))
+            )
             if edge_type:
                 edge_stmt = edge_stmt.where(Edge.type == edge_type)
+            raw_edges = list((await self.session.execute(edge_stmt)).scalars().all())
+            domain_edges = [
+                GraphEdge(
+                    id=e.id,
+                    src_id=e.src_id,
+                    dst_id=e.dst_id,
+                    type=e.type,
+                    props=e.props or {},
+                )
+                for e in raw_edges
+            ]
+            kept = filter_edges_for_direction(domain_edges, frontier, direction=direction)
+            kept_ids = {e.id for e in kept}
+            for edge in raw_edges:
+                if edge.id in kept_ids:
+                    collected_edges[edge.id] = edge
 
-            edges = list((await self.session.execute(edge_stmt)).scalars().all())
-            next_frontier: set[UUID] = set()
-            for edge in edges:
-                collected_edges[edge.id] = edge
-                for endpoint in (edge.src_id, edge.dst_id):
-                    if endpoint not in visited_nodes:
-                        next_frontier.add(endpoint)
-            frontier = next_frontier - set(visited_nodes.keys())
+            frontier = next_frontier(kept, frontier, visited)
+            visited |= frontier
             if frontier:
                 nodes = list(
                     (await self.session.execute(select(Node).where(Node.id.in_(frontier)))).scalars().all()

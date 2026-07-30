@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from graphrag.api.deps import get_retrieval_service
 from graphrag.api.schemas import SearchRequest, SearchResponse
@@ -12,13 +12,10 @@ async def search(
     body: SearchRequest,
     service: RetrievalService = Depends(get_retrieval_service),
 ) -> SearchResponse:
-    try:
-        return await service.hybrid_search(
-            body.query,
-            top_k=body.top_k,
-            node_types=body.node_types,
-            expand_hops=body.expand_hops,
-            edge_types=body.edge_types,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return await service.hybrid_search(
+        body.query,
+        top_k=body.top_k,
+        node_types=body.node_types,
+        expand_hops=body.expand_hops,
+        edge_types=body.edge_types,
+    )

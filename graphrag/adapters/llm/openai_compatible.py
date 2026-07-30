@@ -1,6 +1,7 @@
-from openai import AsyncOpenAI
+from openai import APIError, AsyncOpenAI, OpenAIError
 
 from graphrag.config import Settings
+from graphrag.exceptions import UpstreamModelError
 
 
 class OpenAICompatibleLLM:
@@ -11,6 +12,7 @@ class OpenAICompatibleLLM:
         self._client = AsyncOpenAI(
             base_url=settings.openai_api_base,
             api_key=settings.openai_api_key,
+            timeout=settings.openai_timeout_seconds,
         )
 
     async def complete(
@@ -20,13 +22,16 @@ class OpenAICompatibleLLM:
         user: str,
         temperature: float = 0.2,
     ) -> str:
-        response = await self._client.chat.completions.create(
-            model=self._model,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
+        try:
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+        except (APIError, OpenAIError) as exc:
+            raise UpstreamModelError(f"llm request failed: {exc}") from exc
         content = response.choices[0].message.content
         return content or ""

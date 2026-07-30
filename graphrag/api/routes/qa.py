@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from graphrag.api.deps import get_qa_service
 from graphrag.api.schemas import QARequest, QAResponse
@@ -12,7 +12,4 @@ async def qa(
     body: QARequest,
     service: QAService = Depends(get_qa_service),
 ) -> QAResponse:
-    try:
-        return await service.ask(body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return await service.ask(body)

@@ -32,12 +32,7 @@ async def create_chunk(
     include_embedding: bool = False,
     service: ChunkService = Depends(get_chunk_service),
 ) -> ChunkOut:
-    try:
-        chunk = await service.create(body)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    chunk = await service.create(body)
     return _chunk_out(chunk, include_embedding)
 
 
@@ -47,12 +42,7 @@ async def create_chunks_batch(
     include_embedding: bool = False,
     service: ChunkService = Depends(get_chunk_service),
 ) -> list[ChunkOut]:
-    try:
-        chunks = await service.create_batch(body.chunks)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    chunks = await service.create_batch(body.chunks)
     return [_chunk_out(c, include_embedding) for c in chunks]
 
 
@@ -87,10 +77,7 @@ async def update_chunk(
     include_embedding: bool = False,
     service: ChunkService = Depends(get_chunk_service),
 ) -> ChunkOut:
-    try:
-        chunk = await service.update(chunk_id, body)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    chunk = await service.update(chunk_id, body)
     if not chunk:
         raise HTTPException(status_code=404, detail="chunk not found")
     return _chunk_out(chunk, include_embedding)

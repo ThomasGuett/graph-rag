@@ -10,6 +10,7 @@ from graphrag.adapters.llm.openai_compatible import OpenAICompatibleLLM
 from graphrag.config import Settings, get_settings
 from graphrag.services.chunk_service import ChunkService
 from graphrag.services.edge_service import EdgeService
+from graphrag.services.embedding_service import EmbeddingService
 from graphrag.services.node_service import NodeService
 from graphrag.services.qa_service import QAService
 from graphrag.services.retrieval_service import RetrievalService
@@ -29,6 +30,11 @@ def get_llm_client() -> OpenAICompatibleLLM:
     return OpenAICompatibleLLM(get_settings())
 
 
+@lru_cache
+def get_embedding_service() -> EmbeddingService:
+    return EmbeddingService(get_embedding_client(), get_settings())
+
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async for session in get_session():
         yield session
@@ -45,14 +51,14 @@ def get_edge_service(session: AsyncSession = Depends(get_db_session)) -> EdgeSer
 def get_chunk_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> ChunkService:
-    return ChunkService(session, get_embedding_client())
+    return ChunkService(session, get_embedding_service())
 
 
 def get_retrieval_service(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(settings_dep),
 ) -> RetrievalService:
-    return RetrievalService(session, get_embedding_client(), settings)
+    return RetrievalService(session, get_embedding_service(), settings)
 
 
 def get_qa_service(

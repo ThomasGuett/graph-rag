@@ -6,10 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from graphrag.adapters.db.models import Edge, Node
 from graphrag.api.schemas import EdgeCreate, EdgeUpdate
-
-
-class EdgeConflictError(Exception):
-    pass
+from graphrag.exceptions import ConflictError, NotFoundError, ValidationAppError
 
 
 class EdgeService:
@@ -18,11 +15,11 @@ class EdgeService:
 
     async def create(self, data: EdgeCreate) -> Edge:
         if data.src_id == data.dst_id:
-            raise ValueError("src_id and dst_id must differ")
+            raise ValidationAppError("src_id and dst_id must differ")
         src = await self.session.get(Node, data.src_id)
         dst = await self.session.get(Node, data.dst_id)
         if not src or not dst:
-            raise LookupError("src_id or dst_id not found")
+            raise NotFoundError("src_id or dst_id not found")
 
         edge = Edge(
             src_id=data.src_id,
@@ -34,7 +31,7 @@ class EdgeService:
         try:
             await self.session.flush()
         except IntegrityError as exc:
-            raise EdgeConflictError("edge with same src/dst/type already exists") from exc
+            raise ConflictError("edge with same src/dst/type already exists") from exc
         await self.session.refresh(edge)
         return edge
 
@@ -71,7 +68,7 @@ class EdgeService:
         try:
             await self.session.flush()
         except IntegrityError as exc:
-            raise EdgeConflictError("edge with same src/dst/type already exists") from exc
+            raise ConflictError("edge with same src/dst/type already exists") from exc
         await self.session.refresh(edge)
         return edge
 

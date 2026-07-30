@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from graphrag.api.deps import get_edge_service
 from graphrag.api.schemas import EdgeCreate, EdgeOut, EdgeUpdate
-from graphrag.services.edge_service import EdgeConflictError, EdgeService
+from graphrag.services.edge_service import EdgeService
 
 router = APIRouter(prefix="/edges", tags=["edges"])
 
@@ -14,14 +14,7 @@ async def create_edge(
     body: EdgeCreate,
     service: EdgeService = Depends(get_edge_service),
 ) -> EdgeOut:
-    try:
-        edge = await service.create(body)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except EdgeConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    edge = await service.create(body)
     return EdgeOut.model_validate(edge)
 
 
@@ -55,10 +48,7 @@ async def update_edge(
     body: EdgeUpdate,
     service: EdgeService = Depends(get_edge_service),
 ) -> EdgeOut:
-    try:
-        edge = await service.update(edge_id, body)
-    except EdgeConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    edge = await service.update(edge_id, body)
     if not edge:
         raise HTTPException(status_code=404, detail="edge not found")
     return EdgeOut.model_validate(edge)

@@ -25,9 +25,11 @@ docker compose up --build -d
 | `POSTGRES_*` | Database name/user/password/host/port |
 | `OPENAI_API_BASE` | OpenAI-compatible base URL (e.g. `http://host.docker.internal:11434/v1` or cloud) |
 | `OPENAI_API_KEY` | API key (any non-empty value for many local servers) |
+| `OPENAI_TIMEOUT_SECONDS` | HTTP timeout for LLM/embedding calls |
 | `LLM_MODEL` | Chat model id |
 | `EMBEDDING_MODEL` | Embedding model id (**must produce 2048-d vectors**) |
 | `EMBEDDING_DIM` | Must be `2048` |
+| `EMBEDDING_BATCH_SIZE` | Max texts per embedding request |
 | `RETRIEVAL_TOP_K` / `EXPAND_HOPS` / `CONTEXT_TOKEN_BUDGET` | Retrieval defaults |
 
 ## API overview

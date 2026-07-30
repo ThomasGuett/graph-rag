@@ -1,1 +1,3 @@
-"""Optional async workers (embed backfill, ingest) — not required for v1 sync API."""
+from graphrag.workers.reembed import reembed_chunks_missing_vectors
+
+__all__ = ["reembed_chunks_missing_vectors"]
