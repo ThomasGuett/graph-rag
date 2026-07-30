@@ -1,0 +1,36 @@
+services:
+  postgres:
+    container_name: postgres-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    image: pgvector/pgvector:pg17
+    volumes:
+      - ./data:/var/lib/postgresql/18/docker
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: postgres-db-admin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - 8091:80
+    depends_on:
+      - postgres
+
+  nginx:
+    image: nginx
+    ports:
+      - 8000:80
+    volumes:
+      - ./html:/usr/share/nginx/html
+
+volumes:
+  postgres_data:
