@@ -9,8 +9,10 @@ from graphrag.adapters.embeddings.openai_compatible import OpenAICompatibleEmbed
 from graphrag.adapters.llm.openai_compatible import OpenAICompatibleLLM
 from graphrag.config import Settings, get_settings
 from graphrag.services.chunk_service import ChunkService
+from graphrag.services.community_service import CommunityService
 from graphrag.services.edge_service import EdgeService
 from graphrag.services.embedding_service import EmbeddingService
+from graphrag.services.ingest_service import IngestService
 from graphrag.services.node_service import NodeService
 from graphrag.services.qa_service import QAService
 from graphrag.services.retrieval_service import RetrievalService
@@ -66,3 +68,17 @@ def get_qa_service(
     settings: Settings = Depends(settings_dep),
 ) -> QAService:
     return QAService(retrieval, get_llm_client(), settings)
+
+
+def get_ingest_service(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(settings_dep),
+) -> IngestService:
+    return IngestService(session, get_embedding_service(), get_llm_client(), settings)
+
+
+def get_community_service(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(settings_dep),
+) -> CommunityService:
+    return CommunityService(session, get_llm_client(), get_embedding_service(), settings)

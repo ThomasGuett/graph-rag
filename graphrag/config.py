@@ -25,15 +25,15 @@ class Settings(BaseSettings):
     database_url: str | None = None
 
     # OpenAI-compatible API
-    openai_api_base: str = "http://localhost:11434/v1"
+    openai_api_base: str = "http://localhost:11535/v1"
     openai_api_key: str = "sk-local"
     openai_timeout_seconds: float = Field(default=60.0, gt=0)
 
     # Models
     llm_model: str = "llama3.2"
     embedding_model: str = "nomic-embed-text"
-    embedding_dim: int = 2048
-    embedding_batch_size: int = Field(default=64, ge=1, le=2048)
+    embedding_dim: int = 2000
+    embedding_batch_size: int = Field(default=64, ge=1, le=2000)
 
     # Retrieval
     retrieval_top_k: int = Field(default=8, ge=1, le=100)
@@ -41,11 +41,17 @@ class Settings(BaseSettings):
     context_token_budget: int = Field(default=4000, ge=100)
     hnsw_ef_search: int = Field(default=64, ge=1)
 
+    # Indexing / ingest
+    chunk_size: int = Field(default=1200, ge=100, le=16000)
+    chunk_overlap: int = Field(default=200, ge=0, le=4000)
+    extraction_concurrency: int = Field(default=4, ge=1, le=32)
+    community_min_size: int = Field(default=3, ge=2, le=1000)
+
     @field_validator("embedding_dim")
     @classmethod
-    def _dim_must_be_2048(cls, v: int) -> int:
-        if v != 2048:
-            raise ValueError("EMBEDDING_DIM must be 2048 for this schema")
+    def _dim_must_be_2000(cls, v: int) -> int:
+        if v != 2000:
+            raise ValueError("EMBEDDING_DIM must be 2000 for this schema")
         return v
 
     @property

@@ -1,6 +1,6 @@
 -- GraphRAG core schema
 -- Requires: PostgreSQL 16+ recommended, pgvector extension
--- Embedding dimension: 2048 (fixed)
+-- Embedding dimension: 2000 (fixed)
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
@@ -45,13 +45,13 @@ CREATE INDEX edges_src_type_idx ON edges (src_id, type);
 CREATE INDEX edges_dst_type_idx ON edges (dst_id, type);
 
 -- ---------------------------------------------------------------------------
--- chunks: text units with pgvector embeddings (dim 2048)
+-- chunks: text units with pgvector embeddings (dim 2000)
 -- ---------------------------------------------------------------------------
 CREATE TABLE chunks (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     node_id     UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     text        TEXT NOT NULL,
-    embedding   vector(2048),
+    embedding   vector(2000),
     props       JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -82,4 +82,87 @@ CREATE TRIGGER nodes_set_updated_at
 
 CREATE TRIGGER chunks_set_updated_at
     BEFORE UPDATE ON chunks
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- documents: raw ingest source; linked to a document-typed node
+-- ---------------------------------------------------------------------------
+CREATE TABLE documents (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title       TEXT NOT NULL,
+    text        TEXT NOT NULL,
+    source_uri  TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    node_id     UUID REFERENCES nodes(id) ON DELETE SET NULL,
+    error       TEXT,
+    props       JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT documents_title_nonempty CHECK (length(trim(title)) > 0),
+    CONSTRAINT documents_text_nonempty CHECK (length(trim(text)) > 0),
+    CONSTRAINT documents_status_valid CHECK (
+        status IN (
+            'pending', 'chunking', 'extracting', 'resolving',
+            'building_communities', 'ready', 'failed'
+        )
+    )
+);
+
+CREATE INDEX documents_status_idx ON documents (status);
+CREATE INDEX documents_node_idx ON documents (node_id);
+CREATE INDEX documents_props_gin ON documents USING gin (props);
+
+CREATE TABLE ingest_jobs (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id  UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    stage        TEXT NOT NULL DEFAULT 'pending',
+    status       TEXT NOT NULL DEFAULT 'pending',
+    progress     JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ingest_jobs_status_valid CHECK (
+        status IN ('pending', 'running', 'completed', 'failed')
+    )
+);
+
+CREATE INDEX ingest_jobs_document_idx ON ingest_jobs (document_id);
+CREATE INDEX ingest_jobs_status_idx ON ingest_jobs (status);
+
+-- ---------------------------------------------------------------------------
+-- communities: flat connected-component clusters (no Leiden hierarchy)
+-- ---------------------------------------------------------------------------
+CREATE TABLE communities (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    label         TEXT NOT NULL,
+    summary       TEXT,
+    node_id       UUID REFERENCES nodes(id) ON DELETE SET NULL,
+    member_count  INTEGER NOT NULL DEFAULT 0,
+    props         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT communities_label_nonempty CHECK (length(trim(label)) > 0),
+    CONSTRAINT communities_member_count_nonneg CHECK (member_count >= 0)
+);
+
+CREATE INDEX communities_node_idx ON communities (node_id);
+
+CREATE TABLE community_members (
+    community_id  UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+    node_id       UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    PRIMARY KEY (community_id, node_id)
+);
+
+CREATE INDEX community_members_node_idx ON community_members (node_id);
+
+CREATE TRIGGER documents_set_updated_at
+    BEFORE UPDATE ON documents
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER ingest_jobs_set_updated_at
+    BEFORE UPDATE ON ingest_jobs
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER communities_set_updated_at
+    BEFORE UPDATE ON communities
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();

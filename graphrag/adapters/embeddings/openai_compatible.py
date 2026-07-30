@@ -1,7 +1,8 @@
 from openai import APIError, AsyncOpenAI, OpenAIError
 
+from graphrag.adapters.embeddings.dim import fit_embedding
 from graphrag.config import Settings
-from graphrag.exceptions import EmbeddingDimensionError, UpstreamModelError
+from graphrag.exceptions import UpstreamModelError
 
 
 class OpenAICompatibleEmbeddings:
@@ -24,10 +25,4 @@ class OpenAICompatibleEmbeddings:
         except (APIError, OpenAIError) as exc:
             raise UpstreamModelError(f"embedding request failed: {exc}") from exc
         vectors = [item.embedding for item in sorted(response.data, key=lambda d: d.index)]
-        for vec in vectors:
-            if len(vec) != self.dim:
-                raise EmbeddingDimensionError(
-                    f"Embedding dimension mismatch: got {len(vec)}, expected {self.dim}. "
-                    f"Configure EMBEDDING_MODEL / EMBEDDING_DIM to match."
-                )
-        return vectors
+        return [fit_embedding(vec, self.dim) for vec in vectors]

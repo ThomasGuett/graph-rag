@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from graphrag.adapters.embeddings.base import EmbeddingClient
+from graphrag.adapters.embeddings.dim import fit_embedding
 from graphrag.config import Settings
 from graphrag.exceptions import EmbeddingDimensionError
 
@@ -29,10 +30,5 @@ class EmbeddingService:
                 raise EmbeddingDimensionError(
                     f"Embedding provider returned {len(vectors)} vectors for {len(batch)} texts"
                 )
-            for vec in vectors:
-                if len(vec) != self.dim:
-                    raise EmbeddingDimensionError(
-                        f"Embedding dimension mismatch: got {len(vec)}, expected {self.dim}"
-                    )
-            out.extend(vectors)
+            out.extend(fit_embedding(vec, self.dim) for vec in vectors)
         return out

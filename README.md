@@ -1,6 +1,6 @@
 # graph-rag
 
-Multi-purpose **GraphRAG** system: PostgreSQL + pgvector (embeddings dim **2048**), Python/FastAPI backend, CRUD REST API, hybrid vector + graph retrieval for LLM Q&A.
+Multi-purpose **GraphRAG** system: PostgreSQL + pgvector (embeddings dim **2000**), Python/FastAPI backend, CRUD REST API, hybrid vector + graph retrieval for LLM Q&A.
 
 LLMs and embeddings are accessed through a configurable **OpenAI-compatible** HTTP API (local or cloud).
 
@@ -27,9 +27,12 @@ docker compose up --build -d
 | `OPENAI_API_KEY` | API key (any non-empty value for many local servers) |
 | `OPENAI_TIMEOUT_SECONDS` | HTTP timeout for LLM/embedding calls |
 | `LLM_MODEL` | Chat model id |
-| `EMBEDDING_MODEL` | Embedding model id (**must produce 2048-d vectors**) |
-| `EMBEDDING_DIM` | Must be `2048` |
+| `EMBEDDING_MODEL` | Embedding model id (vectors longer than 2000 are truncated + L2-renormalized) |
+| `EMBEDDING_DIM` | Must be `2000` |
 | `EMBEDDING_BATCH_SIZE` | Max texts per embedding request |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | Document chunking windows |
+| `EXTRACTION_CONCURRENCY` | Parallel LLM extractions per ingest job |
+| `COMMUNITY_MIN_SIZE` | Min entities per community (default 3) |
 | `RETRIEVAL_TOP_K` / `EXPAND_HOPS` / `CONTEXT_TOKEN_BUDGET` | Retrieval defaults |
 
 ## API overview
@@ -37,9 +40,13 @@ docker compose up --build -d
 Base path: `/api/v1`
 
 - CRUD: `/nodes`, `/edges`, `/chunks` (+ `/chunks/batch`)
+- Ingest: `POST /documents` (chunk → extract → resolve → communities), `GET /documents`, `POST /documents/{id}/reindex`
+- Communities: `GET /communities`, `GET /communities/{id}`, `POST /communities/rebuild`
 - `POST /search` — hybrid retrieval (no LLM)
 - `POST /qa` — retrieve → context pack → LLM answer
 - `GET /health`
+
+Existing volumes: apply `migrations/001_indexing_pipeline.sql` once if you upgraded from a pre-ingest schema.
 
 ## Local development (without Docker for the API)
 
