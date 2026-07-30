@@ -126,6 +126,7 @@ class QASource(BaseModel):
     node_id: UUID
     node_name: str
     excerpt: str
+    score: float | None = None
 
 
 class QAResponse(BaseModel):
@@ -133,6 +134,12 @@ class QAResponse(BaseModel):
     sources: list[QASource] = Field(default_factory=list)
     subgraph: SubgraphOut | None = None
     mode_used: SearchMode = "hybrid"
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Aggregate retrieval confidence from top source scores",
+    )
 
 
 class HealthOut(BaseModel):

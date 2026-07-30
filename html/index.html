@@ -2,10 +2,176 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>GraphRAG</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GraphRAG Desk</title>
+    <meta
+      name="description"
+      content="Ask the knowledge graph. Get sourced answers with confidence for RFx and desk work."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Playfair+Display:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <h1>GraphRAG</h1>
-    <p>API docs: <a href="http://localhost:8080/docs">http://localhost:8080/docs</a></p>
+    <header class="mast">
+      <a class="mast__brand" href="/">GraphRAG</a>
+      <p class="mast__meta" id="health-chip">API · checking</p>
+      <button type="button" class="mast__desk" id="desk-open" aria-haspopup="dialog" aria-controls="desk">
+        Desk
+      </button>
+    </header>
+
+    <main class="stage">
+      <section class="ask" aria-labelledby="ask-title">
+        <p class="kicker">Ask the graph</p>
+        <h1 class="ask__title" id="ask-title">Answers with receipts.</h1>
+        <p class="ask__lede">
+          Put the RFx question here. The desk returns a grounded answer, the sources it used, and a
+          confidence reading from retrieval scores.
+        </p>
+
+        <div class="thread" id="thread" aria-live="polite"></div>
+
+        <form class="composer" id="ask-form">
+          <div class="composer__row">
+            <label class="sr-only" for="question">Question</label>
+            <textarea
+              class="composer__field"
+              id="question"
+              name="question"
+              rows="3"
+              required
+              placeholder="What does our SOC 2 report say about encryption at rest?"
+            ></textarea>
+            <button class="btn" type="submit" id="ask-submit">Ask</button>
+          </div>
+          <div class="composer__tools">
+            <label class="mode">
+              Mode
+              <select id="mode" name="mode">
+                <option value="auto" selected>Auto</option>
+                <option value="local">Local</option>
+                <option value="global">Global</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </label>
+            <p class="status-line" id="ask-status" role="status"></p>
+          </div>
+        </form>
+      </section>
+
+      <aside class="proof" aria-labelledby="proof-title">
+        <p class="kicker" id="proof-title">Proof</p>
+
+        <div class="confidence" id="confidence-block">
+          <div class="confidence__head">
+            <span class="confidence__value" id="confidence-value">—</span>
+            <span class="confidence__meta" id="mode-used">Mode · —</span>
+          </div>
+          <div class="meter" aria-hidden="true">
+            <div class="meter__fill" id="confidence-meter"></div>
+          </div>
+          <p class="empty" id="confidence-note">
+            Confidence appears after the first answer. It is an aggregate of top retrieval scores,
+            not a guarantee of correctness.
+          </p>
+        </div>
+
+        <div>
+          <p class="kicker">Sources</p>
+          <ul class="sources" id="sources"></ul>
+          <p class="empty" id="sources-empty">Sources for the latest answer will list here.</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="colophon">
+      <span>GraphRAG · sourced desk answers</span>
+      <span>Text ingest via Desk · media becomes captioned text documents</span>
+    </footer>
+
+    <div class="desk" id="desk" hidden>
+      <div class="desk__scrim" id="desk-scrim" tabindex="-1"></div>
+      <div
+        class="desk__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="desk-title"
+        id="desk-panel"
+      >
+        <div class="desk__head">
+          <h2 class="desk__title" id="desk-title">Desk</h2>
+          <button type="button" class="btn btn--ghost" id="desk-close">Close</button>
+        </div>
+
+        <section class="panel" aria-labelledby="health-title">
+          <h3 class="panel__title" id="health-title">System</h3>
+          <div class="health" id="health-detail">Loading health…</div>
+        </section>
+
+        <section class="panel" aria-labelledby="ingest-title">
+          <h3 class="panel__title" id="ingest-title">Ingest</h3>
+          <form class="panel" id="ingest-form">
+            <div class="field">
+              <label for="doc-title">Title</label>
+              <input id="doc-title" name="title" required placeholder="SOC 2 Type II — 2025" />
+            </div>
+            <div class="field">
+              <label for="doc-text">Text</label>
+              <textarea
+                id="doc-text"
+                name="text"
+                rows="6"
+                required
+                placeholder="Paste the source text the graph should index…"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="doc-uri">Source URI (optional)</label>
+              <input id="doc-uri" name="source_uri" placeholder="https://… or file path" />
+            </div>
+            <div
+              class="drop"
+              id="media-drop"
+              tabindex="0"
+              role="button"
+              aria-label="Attach a text or media file"
+            >
+              <strong>Attach file</strong>
+              Text files fill the body. Images and other media become a captioned document
+              (API is text-only today).
+              <input class="sr-only" type="file" id="media-input" />
+            </div>
+            <p class="status-line" id="ingest-status" role="status"></p>
+            <button class="btn" type="submit" id="ingest-submit">Index document</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="docs-title">
+          <div class="confidence__head">
+            <h3 class="panel__title" id="docs-title">Documents</h3>
+            <button type="button" class="btn btn--ghost" id="docs-refresh">Refresh</button>
+          </div>
+          <ul class="doc-list" id="doc-list"></ul>
+          <p class="empty" id="docs-empty">No documents yet.</p>
+        </section>
+
+        <section class="panel" aria-labelledby="comm-title">
+          <div class="confidence__head">
+            <h3 class="panel__title" id="comm-title">Communities</h3>
+            <button type="button" class="btn btn--ghost" id="comm-rebuild">Rebuild</button>
+          </div>
+          <ul class="doc-list" id="comm-list"></ul>
+          <p class="empty" id="comm-empty">No communities yet.</p>
+          <p class="status-line" id="comm-status" role="status"></p>
+        </section>
+      </div>
+    </div>
+
+    <script src="./app.js" defer></script>
   </body>
 </html>
