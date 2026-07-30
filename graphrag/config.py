@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     expand_hops: int = Field(default=1, ge=0, le=5)
     context_token_budget: int = Field(default=4000, ge=100)
     hnsw_ef_search: int = Field(default=64, ge=1)
+    global_map_top_k: int = Field(default=6, ge=1, le=50)
+    local_entity_top_k: int = Field(default=5, ge=1, le=50)
+    auto_entity_score_threshold: float = Field(default=0.55, ge=0.0, le=1.0)
+    global_map_concurrency: int = Field(default=4, ge=1, le=32)
 
     # Indexing / ingest
     chunk_size: int = Field(default=1200, ge=100, le=16000)

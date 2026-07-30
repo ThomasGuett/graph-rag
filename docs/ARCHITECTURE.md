@@ -213,14 +213,15 @@ Base path: `/api/v1`. JSON in/out. Auth is pluggable (API key / JWT); omit for l
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/search` | Hybrid retrieval only (no LLM) |
-| `POST` | `/qa` | Full GraphRAG: retrieve → context → LLM answer |
+| `POST` | `/search` | Retrieval with `mode=auto\|local\|global\|hybrid` (no LLM) |
+| `POST` | `/qa` | GraphRAG answer; global uses community map-reduce |
 
 #### `POST /search` body
 
 ```json
 {
   "query": "How does billing relate to accounts?",
+  "mode": "auto",
   "top_k": 8,
   "node_types": ["document", "concept"],
   "expand_hops": 1,
@@ -228,24 +229,29 @@ Base path: `/api/v1`. JSON in/out. Auth is pluggable (API key / JWT); omit for l
 }
 ```
 
-Response: ranked chunks + linked nodes + optional expanded neighbor subgraph.
+Response: ranked chunks + linked nodes + optional expanded neighbor subgraph + `mode_used`.
 
 #### `POST /qa` body
 
 ```json
 {
   "question": "…",
+  "mode": "auto",
   "top_k": 8,
   "expand_hops": 1,
   "include_sources": true
 }
 ```
 
-Response: `{ "answer": "…", "sources": […], "subgraph": { "nodes": [], "edges": [] } }`.
+Response: `{ "answer": "…", "sources": […], "subgraph": { "nodes": [], "edges": [] }, "mode_used": "local" }`.
 
 ---
 
 ## 6. GraphRAG retrieval pipeline
+
+`POST /search` and `POST /qa` accept `mode: auto|local|global|hybrid` (default `auto`).
+
+### Hybrid (vector + hop expand)
 
 ```
 Question
@@ -264,7 +270,7 @@ Question
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│  Graph expand   │  BFS/DFS on edges up to expand_hops
+│  Graph expand   │  BFS on edges up to expand_hops
 │                 │  collect neighbor nodes + their chunks
 └────────┬────────┘
          ▼
@@ -279,37 +285,31 @@ Question
       Answer + citations
 ```
 
-### Retrieval SQL sketch
+### Local (entity-first)
 
-```sql
--- Vector stage
-SELECT c.id, c.node_id, c.text, c.props,
-       1 - (c.embedding <=> :qvec) AS score
-FROM chunks c
-WHERE c.embedding IS NOT NULL
-ORDER BY c.embedding <=> :qvec
-LIMIT :top_k;
+1. Resolve seed entities (exact/alias on `normalized_name`/`aliases`, else ANN on `entity_description` chunks).
+2. Expand along typed edges (excluding `mentions`).
+3. Collect entity description chunks + document evidence via reverse `mentions` / `props.chunk_id`.
+4. Pack + single LLM answer (same as hybrid QA).
 
--- Graph expand (1 hop example)
-WITH seed AS (SELECT unnest(:node_ids::uuid[]) AS id)
-SELECT e.*, n.*
-FROM edges e
-JOIN nodes n ON n.id = CASE
-  WHEN e.src_id IN (SELECT id FROM seed) THEN e.dst_id
-  WHEN e.dst_id IN (SELECT id FROM seed) THEN e.src_id
-END
-WHERE e.src_id IN (SELECT id FROM seed)
-   OR e.dst_id IN (SELECT id FROM seed);
-```
+### Global (community map-reduce)
 
-For `expand_hops > 1`, use a recursive CTE or iterative queries in the service.
+1. ANN over community summary chunks (`node.type=community` / `kind=community_summary`).
+2. **Map:** LLM partial answer per top community summary.
+3. **Reduce:** LLM synthesizes the final answer from partials.
+
+### Auto routing
+
+- Strong entity match and non-thematic question → `local`
+- Communities exist and (thematic keywords or no strong entities) → `global`
+- Else → `hybrid`
 
 ### Ranking / packing
 
-1. Seed chunks ranked by cosine similarity.
+1. Seed chunks ranked by cosine similarity (hybrid) or entity seed score × hop decay (local).
 2. Expanded chunks get a decayed score (e.g. `score * 0.5^hop`).
-3. Cap total characters/tokens; prefer diversity across nodes (MMR-style optional).
-4. Serialize context as labeled blocks: `[node:Name|type] chunk text …`.
+3. Cap total characters/tokens.
+4. Serialize context as labeled blocks: `[node:Name|type|chunk:id] chunk text …`.
 
 ### Why hybrid matters
 
@@ -440,9 +440,10 @@ Client POST /qa { question }
 3. **Graph expand** — neighbors + hybrid retrieval packing.
 4. **`/qa`** — LLM adapter + citation response.
 5. **Ingest pipeline** — `POST /documents`: chunk → embed → LLM extract → resolve → flat communities.
-6. **Hardening** — auth, tenants, metrics, eval harness for retrieval quality.
+6. **Query modes** — `local` / `global` / `hybrid` / `auto` on `/search` and `/qa` (entity-first + community map-reduce).
+7. **Hardening** — auth, tenants, metrics, eval harness for retrieval quality.
 
-**Follow-ups (not in this phase):** Leiden hierarchical communities, Global Search map-reduce, dedicated entity-first Local Search mode.
+**Follow-ups:** Leiden hierarchical communities / multi-level community reports.
 
 ---
 

@@ -34,6 +34,8 @@ docker compose up --build -d
 | `EXTRACTION_CONCURRENCY` | Parallel LLM extractions per ingest job |
 | `COMMUNITY_MIN_SIZE` | Min entities per community (default 3) |
 | `RETRIEVAL_TOP_K` / `EXPAND_HOPS` / `CONTEXT_TOKEN_BUDGET` | Retrieval defaults |
+| `GLOBAL_MAP_TOP_K` / `LOCAL_ENTITY_TOP_K` / `AUTO_ENTITY_SCORE_THRESHOLD` | Local/global/auto knobs |
+| `GLOBAL_MAP_CONCURRENCY` | Parallel community map LLM calls |
 
 ## API overview
 
@@ -42,8 +44,8 @@ Base path: `/api/v1`
 - CRUD: `/nodes`, `/edges`, `/chunks` (+ `/chunks/batch`)
 - Ingest: `POST /documents` (chunk → extract → resolve → communities), `GET /documents`, `POST /documents/{id}/reindex`
 - Communities: `GET /communities`, `GET /communities/{id}`, `POST /communities/rebuild`
-- `POST /search` — hybrid retrieval (no LLM)
-- `POST /qa` — retrieve → context pack → LLM answer
+- `POST /search` — retrieval with `mode=auto|local|global|hybrid`
+- `POST /qa` — retrieve → answer (global uses community map-reduce)
 - `GET /health`
 
 Existing volumes: apply `migrations/001_indexing_pipeline.sql` once if you upgraded from a pre-ingest schema.
