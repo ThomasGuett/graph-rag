@@ -1,7 +1,11 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+SearchMode = Literal["auto", "local", "global", "hybrid"]
 
 
 class NodeCreate(BaseModel):
@@ -84,6 +88,7 @@ class SubgraphOut(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
+    mode: SearchMode = "auto"
     top_k: int | None = Field(default=None, ge=1, le=100)
     node_types: list[str] | None = None
     expand_hops: int | None = Field(default=None, ge=0, le=5)
@@ -103,10 +108,12 @@ class SearchHit(BaseModel):
 class SearchResponse(BaseModel):
     hits: list[SearchHit]
     subgraph: SubgraphOut
+    mode_used: SearchMode = "hybrid"
 
 
 class QARequest(BaseModel):
     question: str = Field(min_length=1)
+    mode: SearchMode = "auto"
     top_k: int | None = Field(default=None, ge=1, le=100)
     expand_hops: int | None = Field(default=None, ge=0, le=5)
     node_types: list[str] | None = None
@@ -125,6 +132,7 @@ class QAResponse(BaseModel):
     answer: str
     sources: list[QASource] = Field(default_factory=list)
     subgraph: SubgraphOut | None = None
+    mode_used: SearchMode = "hybrid"
 
 
 class HealthOut(BaseModel):

@@ -12,8 +12,9 @@ async def search(
     body: SearchRequest,
     service: RetrievalService = Depends(get_retrieval_service),
 ) -> SearchResponse:
-    return await service.hybrid_search(
+    return await service.search(
         body.query,
+        mode=body.mode,
         top_k=body.top_k,
         node_types=body.node_types,
         expand_hops=body.expand_hops,

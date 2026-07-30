@@ -141,9 +141,12 @@ Full recompute of communities + LLM summaries + embedded summary chunks.
 
 ### `POST /search`
 
+`mode` selects the retrieval strategy (`auto` | `local` | `global` | `hybrid`, default `auto`).
+
 ```json
 {
   "query": "When are accounts billed?",
+  "mode": "auto",
   "top_k": 8,
   "node_types": ["document", "concept"],
   "expand_hops": 1,
@@ -167,9 +170,17 @@ Full recompute of communities + LLM summaries + embedded summary chunks.
   "subgraph": {
     "nodes": [],
     "edges": []
-  }
+  },
+  "mode_used": "hybrid"
 }
 ```
+
+Modes:
+
+- **`hybrid`** — ANN on chunk embeddings, then hop-expand on the graph (original path).
+- **`local`** — entity-first: resolve query entities → expand typed edges → collect entity + document evidence via `mentions`.
+- **`global`** — rank flat community summary chunks only (no map-reduce; that happens in `/qa`).
+- **`auto`** — heuristic: strong entity match → local; thematic / no entities + communities exist → global; else hybrid.
 
 ---
 
@@ -180,6 +191,7 @@ Full recompute of communities + LLM summaries + embedded summary chunks.
 ```json
 {
   "question": "When are accounts billed?",
+  "mode": "auto",
   "top_k": 8,
   "expand_hops": 1,
   "include_sources": true
@@ -200,9 +212,12 @@ Full recompute of communities + LLM summaries + embedded summary chunks.
   "subgraph": {
     "nodes": [],
     "edges": []
-  }
+  },
+  "mode_used": "local"
 }
 ```
+
+For `mode=global`, the service map-reduces over top community summaries (per-community partial answers → final synthesis).
 
 ---
 
