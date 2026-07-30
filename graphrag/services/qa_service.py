@@ -55,11 +55,13 @@ class QAService:
             "Answer:"
         )
         answer = await self.llm.complete(system=SYSTEM_PROMPT, user=user_prompt)
+        sources = self._sources(request, search)
         return QAResponse(
             answer=answer,
-            sources=self._sources(request, search),
+            sources=sources,
             subgraph=search.subgraph if request.include_sources else None,
             mode_used=mode_used,
+            confidence=self._confidence(search),
         )
 
     async def _ask_global(self, request: QARequest, *, mode_used: SearchMode) -> QAResponse:
@@ -105,11 +107,13 @@ class QAService:
             "Final answer:"
         )
         answer = await self.llm.complete(system=REDUCE_SYSTEM, user=reduce_user, temperature=0.2)
+        sources = self._sources(request, search)
         return QAResponse(
             answer=answer,
-            sources=self._sources(request, search),
+            sources=sources,
             subgraph=search.subgraph if request.include_sources else None,
             mode_used=mode_used,
+            confidence=self._confidence(search),
         )
 
     def _sources(self, request: QARequest, search: SearchResponse) -> list[QASource]:
@@ -122,6 +126,19 @@ class QAService:
                 node_id=hit.node_id,
                 node_name=hit.node_name,
                 excerpt=hit.text[:280],
+                score=float(hit.score),
             )
             for hit in search.hits[:limit]
         ]
+
+    def _confidence(self, search: SearchResponse) -> float | None:
+        if not search.hits:
+            return None
+        limit = min(len(search.hits), self.settings.retrieval_top_k)
+        scores = [max(0.0, min(1.0, float(h.score))) for h in search.hits[:limit]]
+        if not scores:
+            return None
+        # Emphasize the best hit while still reflecting breadth.
+        best = max(scores)
+        mean = sum(scores) / len(scores)
+        return round(0.65 * best + 0.35 * mean, 3)
