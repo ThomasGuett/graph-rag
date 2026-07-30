@@ -6,9 +6,9 @@
 
 :root {
   /* Newsprint — salmon paper · burgundy accent */
-  --color-paper: oklch(92% 0.045 50);
-  --color-paper-2: oklch(89% 0.050 50);
-  --color-paper-3: oklch(84% 0.054 45);
+  --color-paper: oklch(97.522% 0.017 67.50);
+  --color-paper-2: oklch(89% 0.0175 67.55);
+  --color-paper-3: oklch(84% 0.018 60);
   --color-rule: oklch(68% 0.030 40);
   --color-rule-2: oklch(35% 0.020 35);
   --color-muted: oklch(46% 0.022 35);
