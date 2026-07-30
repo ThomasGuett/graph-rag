@@ -155,7 +155,11 @@
       });
       appendBubble("assistant", payload.answer || "(empty answer)");
       renderProof(payload);
-      setStatus(els.askStatus, "Answered", "ok");
+      if (payload.generation_error) {
+        setStatus(els.askStatus, payload.generation_error, "error");
+      } else {
+        setStatus(els.askStatus, "Answered", "ok");
+      }
     } catch (err) {
       appendBubble("assistant", `Could not answer: ${err.message}`);
       setStatus(els.askStatus, err.message, "error");
@@ -189,13 +193,16 @@
   async function loadHealth() {
     try {
       const health = await api("/health");
-      const ok = health.status === "ok" || health.db === true;
+      const modelsOk = health.llm_ok === true && health.embeddings_ok === true;
+      const ok = health.db === true && modelsOk;
       els.healthChip.textContent = ok
         ? `API · ${health.llm_model || "ready"}`
         : "API · degraded";
       els.healthDetail.innerHTML = `
         <span>Status · ${escapeHtml(health.status || "unknown")}</span>
         <span>DB · ${health.db ? "up" : "down"}</span>
+        <span>LLM probe · ${health.llm_ok ? "ok" : "fail"}</span>
+        <span>Embed probe · ${health.embeddings_ok ? "ok" : "fail"}</span>
         <span>Embed dim · ${escapeHtml(String(health.embedding_dim ?? "—"))}</span>
         <span>LLM · ${escapeHtml(health.llm_model || "—")}</span>
         <span>Embed · ${escapeHtml(health.embedding_model || "—")}</span>

@@ -140,6 +140,10 @@ class QAResponse(BaseModel):
         le=1.0,
         description="Aggregate retrieval confidence from top source scores",
     )
+    generation_error: str | None = Field(
+        default=None,
+        description="Set when retrieval succeeded but LLM generation failed or was skipped",
+    )
 
 
 class HealthOut(BaseModel):
@@ -148,6 +152,8 @@ class HealthOut(BaseModel):
     db: bool
     llm_model: str
     embedding_model: str
+    llm_ok: bool = False
+    embeddings_ok: bool = False
 
 
 class DocumentCreate(BaseModel):

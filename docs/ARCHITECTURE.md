@@ -411,13 +411,14 @@ Client POST /chunks
 ```
 Client POST /qa { question }
   → QAService.ask
-  → EmbeddingClient.embed([question])
-  → RetrievalService.hybrid_search
-  → pack context
+  → resolve_mode (auto → local|global|hybrid)
+  → RetrievalService.search | global_search (+ hybrid fallback hits reused)
+  → pack context OR community map-reduce
   → LLMClient.complete
-  → 200 { answer, sources, subgraph? }
+  → 200 { answer, sources, confidence, mode_used, generation_error? }
 ```
 
+**Failure policy:** embedding/retrieval upstream errors still surface as **502**. If retrieval succeeds but LLM generation fails (or all maps fail), `/qa` returns **200** with sources/confidence and `generation_error` set. Empty hits skip the LLM. Health probes LLM + embeddings so the Desk chip does not show “ready” when models are down.
 ---
 
 ## 11. Non-functional considerations
